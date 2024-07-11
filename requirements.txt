@@ -24,6 +24,7 @@ colorama
 beautifulsoup4
 gunicorn==20.1.0
 numpy
+shortzy
 yt-dlp==2023.11.16
 olefile
 loggers

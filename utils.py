@@ -10,7 +10,7 @@ from pyrogram.errors import InputUserDeactivated, UserNotParticipant, FloodWait,
 from info import *
 from imdb import IMDb
 import asyncio
-from pyrogram.types import Message, InlineKeyboardButton
+from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from pyrogram import enums
 from typing import Union
 import re
@@ -21,6 +21,7 @@ from database.users_chats_db import db
 from bs4 import BeautifulSoup
 import requests
 import aiohttp
+from shortzy import Shortzy
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -53,6 +54,8 @@ class temp(object):
     SETTINGS = {}
 
 async def is_subscribed(bot, query):
+    if await db.find_join_req(query.from_user.id):
+        return True
     try:
         user = await bot.get_chat_member(AUTH_CHANNEL, query.from_user.id)
     except UserNotParticipant:
@@ -60,7 +63,7 @@ async def is_subscribed(bot, query):
     except Exception as e:
         logger.exception(e)
     else:
-        if user.status != 'kicked':
+        if user.status != enums.ChatMemberStatus.BANNED:
             return True
 
     return False
@@ -143,7 +146,6 @@ async def get_poster(query, bulk=False, id=False, file=None):
         'rating': str(movie.get("rating")),
         'url':f'https://www.imdb.com/title/tt{movieid}'
     }
-# https://github.com/odysseusmax/animated-lamp/blob/2ef4730eb2b5f0596ed6d03e7b05243d93e3415b/bot/utils/broadcast.py#L37
 
 async def broadcast_messages(user_id, message):
     try:
@@ -374,6 +376,39 @@ def remove_escapes(text: str) -> str:
             res += text[counter]
     return res
 
+async def get_seconds(time_string):
+    def extract_value_and_unit(ts):
+        value = ""
+        unit = ""
+
+        index = 0
+        while index < len(ts) and ts[index].isdigit():
+            value += ts[index]
+            index += 1
+
+        unit = ts[index:].lstrip()
+
+        if value:
+            value = int(value)
+
+        return value, unit
+
+    value, unit = extract_value_and_unit(time_string)
+
+    if unit == 's':
+        return value
+    elif unit == 'min':
+        return value * 60
+    elif unit == 'hour':
+        return value * 3600
+    elif unit == 'day':
+        return value * 86400
+    elif unit == 'month':
+        return value * 86400 * 30
+    elif unit == 'year':
+        return value * 86400 * 365
+    else:
+        return 0
 
 def humanbytes(size):
     if not size:
@@ -386,32 +421,36 @@ def humanbytes(size):
         n += 1
     return str(round(size, 2)) + " " + Dic_powerN[n] + 'B'
     
-async def get_shortlink(link):
-    https = link.split(":")[0]
-    if "http" == https:
-        https = "https"
-        link = link.replace("http", https)
-    url = f'https://{URL_SHORTENR_WEBSITE}/api'
-    params = {'api': URL_SHORTNER_WEBSITE_API,
-              'url': link,
-              }
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params, raise_for_status=True, ssl=False) as response:
-                data = await response.json()
-                if data["status"] == "success":
-                    return data['shortenedUrl']
-                else:
-                    logger.error(f"Error: {data['message']}")
-                    return f'https://{URL_SHORTENR_WEBSITE}/api?api={URL_SHORTNER_WEBSITE_API}&link={link}'
-
-    except Exception as e:
-        logger.error(e)
-        return f'{URL_SHORTENR_WEBSITE}/api?api={URL_SHORTNER_WEBSITE_API}&link={link}'
-
-
-
+async def get_shortlink(chat_id, link):
+    settings = await get_settings(chat_id) #fetching settings for group
+    if 'shortlink' in settings.keys():
+        URL = settings['shortlink']
+        API = settings['shortlink_api']
+    else:
+        URL = URL_SHORTENR_WEBSITE
+        API = URL_SHORTNER_WEBSITE_API
+    if URL.startswith("shorturllink") or URL.startswith("terabox.in") or URL.startswith("urlshorten.in"):
+        URL = URL_SHORTENR_WEBSITE
+        API = URL_SHORTNER_WEBSITE_API
+    if URL == "api.shareus.io":
+        url = f'https://{URL}/easy_api'
+        params = {
+            "key": API,
+            "link": link,
+        }
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, raise_for_status=True, ssl=False) as response:
+                    data = await response.text()
+                    return data
+        except Exception as e:
+            logger.error(e)
+            return link
+    else:
+        shortzy = Shortzy(api_key=API, base_site=URL)
+        link = await shortzy.convert(link)
+        return link
+   
 def get_readable_time(seconds: int) -> str:
     count = 0
     readable_time = ""
@@ -435,69 +474,17 @@ def get_readable_time(seconds: int) -> str:
     readable_time += ": ".join(time_list)
     return readable_time 
 
-
-
-# async def get_cap(settings, remaining_seconds, files, query, total_results, search):
-#     # Aᴅᴅᴇᴅ Bʏ @creatorrio
-#     if settings["imdb"]:
-#         IMDB_CAP = temp.IMDB_CAP.get(query.from_user.id)
-#         if IMDB_CAP:
-#             cap = IMDB_CAP
-#             cap+="<b>\n\n<u>🍿 Your Movie Files 👇</u></b>\n\n"
-#             for file in files:
-#                 cap += f"<b>📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file.file_id}'>[{get_size(file.file_size)}] {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file.file_name.split()))}\n\n</a></b>"
-#         else:
-#             imdb = await get_poster(search, file=(files[0]).file_name) if settings["imdb"] else None
-#             if imdb:
-#                 TEMPLATE = script.IMDB_TEMPLATE_TXT
-#                 cap = TEMPLATE.format(
-#                     qurey=search,
-#                     title=imdb['title'],
-#                     votes=imdb['votes'],
-#                     aka=imdb["aka"],
-#                     seasons=imdb["seasons"],
-#                     box_office=imdb['box_office'],
-#                     localized_title=imdb['localized_title'],
-#                     kind=imdb['kind'],
-#                     imdb_id=imdb["imdb_id"],
-#                     cast=imdb["cast"],
-#                     runtime=imdb["runtime"],
-#                     countries=imdb["countries"],
-#                     certificates=imdb["certificates"],
-#                     languages=imdb["languages"],
-#                     director=imdb["director"],
-#                     writer=imdb["writer"],
-#                     producer=imdb["producer"],
-#                     composer=imdb["composer"],
-#                     cinematographer=imdb["cinematographer"],
-#                     music_team=imdb["music_team"],
-#                     distributors=imdb["distributors"],
-#                     release_date=imdb['release_date'],
-#                     year=imdb['year'],
-#                     genres=imdb['genres'],
-#                     poster=imdb['poster'],
-#                     plot=imdb['plot'],
-#                     rating=imdb['rating'],
-#                     url=imdb['url'],
-#                     **locals()
-#                 )
-#                 cap+="<b>\n\n<u>🍿 Your Movie Files 👇</u></b>\n\n"
-#                 for file in files:
-#                     cap += f"<b>📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file.file_id}'>[{get_size(file.file_size)}] {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file.file_name.split()))}\n\n</a></b>"
-#             else:
-#                 cap = f"<b>Tʜᴇ Rᴇꜱᴜʟᴛꜱ Fᴏʀ ☞ {search}\n\nRᴇǫᴜᴇsᴛᴇᴅ Bʏ ☞ {message.from_user.mention}\n\nʀᴇsᴜʟᴛ sʜᴏᴡ ɪɴ ☞ {remaining_seconds} sᴇᴄᴏɴᴅs\n\nᴘᴏᴡᴇʀᴇᴅ ʙʏ ☞ : {message.chat.title}\n\n⚠️ ᴀꜰᴛᴇʀ 5 ᴍɪɴᴜᴛᴇꜱ ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ ᴅᴇʟᴇᴛᴇᴅ 🗑️\n\n</b>"
-#                 cap+="<b><u>🍿 Your Movie Files 👇</u></b>\n\n"
-#                 for file in files:
-#                     cap += f"<b>📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file.file_id}'>[{get_size(file.file_size)}] {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file.file_name.split()))}\n\n</a></b>"
-#     else:
-#         cap = f"<b>Hᴇʏ {query.from_user.mention}, Fᴏᴜɴᴅ {total_results} Rᴇsᴜʟᴛs ғᴏʀ Yᴏᴜʀ Movie {search}\n\n</b>"
-#         cap+="<b><u>🍿 Your Movie Files 👇</u></b>\n\n"
-#         for file in files:
-#             cap += f"<b>📁 <a href='https://telegram.me/{temp.U_NAME}?start=files_{file.file_id}'>[{get_size(file.file_size)}] {' '.join(filter(lambda x: not x.startswith('[') and not x.startswith('@') and not x.startswith('www.'), file.file_name.split()))}\n\n</a></b>"
-#     return cap
-
-
-
+async def get_tutorial(chat_id):
+    settings = await get_settings(chat_id) #fetching settings for group
+    if 'tutorial' in settings.keys():
+        if settings['is_tutorial']:
+            TUTORIAL_URL = settings['tutorial']
+        else:
+            TUTORIAL_URL = TUTORIAL
+    else:
+        TUTORIAL_URL = TUTORIAL
+    return TUTORIAL_URL
+  
 
 
 # Credit @LazyDeveloper.
