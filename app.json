@@ -78,7 +78,7 @@
         "PORT": {
             "description": "Port that you want your webApp to be listened to. Read the readme for more info about this var",
             "value": "8080",
-            "required": false
+            "required": true
         },
         "NO_PORT": {
             "description": "If you don't want your port to be displayed. Read the readme for more info about this var",
