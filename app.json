@@ -15,8 +15,8 @@
       "index",
       "inline"
     ],
-    "website": "https://github.com/LazyDeveloperr/LazyPrincess",
-    "repository": "https://github.com/LazyDeveloperr/LazyPrincess",
+    "website": "https://github.com/olarwe3/Princess-somi",
+    "repository": "https://github.com/olarwe3/Princess-somi",
     "env": {
         "BOT_TOKEN": {
             "description": "Your bot token.",
@@ -40,7 +40,7 @@
         },
         "PICS": {
             "description": "Add some telegraph link of pictures .",
-            "required": false
+            "required": true
         },
         "LOG_CHANNEL": {
             "description": "Bot Logs,Give a channel id with -100xxxxxxx",
@@ -78,7 +78,7 @@
         "PORT": {
             "description": "Port that you want your webApp to be listened to. Read the readme for more info about this var",
             "value": "8080",
-            "required": false
+            "required": true
         },
         "NO_PORT": {
             "description": "If you don't want your port to be displayed. Read the readme for more info about this var",
